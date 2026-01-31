@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package files
 COPY front-end-redbus/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (using npm install for better compatibility)
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY front-end-redbus/ .

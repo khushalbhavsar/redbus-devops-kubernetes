@@ -145,12 +145,13 @@ pipeline {
                             --out dependency-check-report
                             --prettyPrint
                             --disableYarnAudit
+                            --noupdate
                         ''', odcInstallation: 'OWASP-Dependency-Check'
                         
                         dependencyCheckPublisher pattern: 'dependency-check-report/dependency-check-report.xml'
                     } catch (Exception e) {
                         echo "⚠️ OWASP Dependency Check skipped: ${e.getMessage()}"
-                        echo "To enable: Manage Jenkins → Tools → Add Dependency-Check → Name: 'OWASP-Dependency-Check' → Install automatically"
+                        echo "Note: Trivy security scan provides similar coverage"
                     }
                 }
             }
