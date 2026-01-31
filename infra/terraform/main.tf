@@ -33,7 +33,7 @@ module "vpc" {
 # EKS Cluster Module
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 19.0"
+  version = "~> 20.0"
 
   cluster_name    = var.cluster_name
   cluster_version = var.kubernetes_version
@@ -47,7 +47,7 @@ module "eks" {
   # EKS Managed Node Group
   eks_managed_node_groups = {
     main = {
-      name           = "${var.cluster_name}-node-group"
+      name           = "redbus-nodes"
       instance_types = var.node_instance_types
 
       min_size     = var.node_min_size
@@ -66,7 +66,7 @@ module "eks" {
     }
   }
 
-  # Cluster access entry
+  # Cluster access - grants admin permissions to the cluster creator
   enable_cluster_creator_admin_permissions = true
 
   tags = {

@@ -2,11 +2,12 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'your-docker-registry'
         AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = ''  // Will be set dynamically
         EKS_CLUSTER_NAME = 'redbus-cluster'
-        FRONTEND_IMAGE = "${DOCKER_REGISTRY}/redbus-frontend"
-        BACKEND_IMAGE = "${DOCKER_REGISTRY}/redbus-backend"
+        ECR_REGISTRY = ''    // Will be set dynamically
+        FRONTEND_IMAGE = ''  // Will be set dynamically
+        BACKEND_IMAGE = ''   // Will be set dynamically
         SONAR_SCANNER_HOME = tool 'SonarQubeScanner'
         SONAR_PROJECT_KEY = 'redbus-devops'
     }
@@ -16,6 +17,23 @@ pipeline {
     }
 
     stages {
+        stage('Setup ECR Registry') {
+            steps {
+                script {
+                    // Get AWS Account ID dynamically
+                    AWS_ACCOUNT_ID = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+                    // Set ECR Registry URL
+                    ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    // Set image names
+                    FRONTEND_IMAGE = "${ECR_REGISTRY}/redbus-frontend"
+                    BACKEND_IMAGE = "${ECR_REGISTRY}/redbus-backend"
+                    echo "📦 ECR Registry: ${ECR_REGISTRY}"
+                    echo "🖼️ Frontend Image: ${FRONTEND_IMAGE}"
+                    echo "🖼️ Backend Image: ${BACKEND_IMAGE}"
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 echo '📥 Checking out source code...'
@@ -160,10 +178,13 @@ pipeline {
 
         stage('Push Docker Images') {
             steps {
-                echo '📤 Pushing Docker images to registry...'
-                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                echo '📤 Pushing Docker images to ECR...'
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin ${DOCKER_REGISTRY}
+                        # Login to ECR
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        
+                        # Push images
                         docker push ${FRONTEND_IMAGE}:${BUILD_NUMBER}
                         docker push ${FRONTEND_IMAGE}:latest
                         docker push ${BACKEND_IMAGE}:${BUILD_NUMBER}

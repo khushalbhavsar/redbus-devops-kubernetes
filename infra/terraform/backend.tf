@@ -1,11 +1,11 @@
-# Remote state configuration using S3 and DynamoDB
+# Remote state configuration using S3
 terraform {
   backend "s3" {
-    bucket         = "redbus-terraform-state"
-    key            = "eks/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "redbus-terraform-locks"
+    bucket       = "redbus-terraform-state"
+    key          = "eks/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
