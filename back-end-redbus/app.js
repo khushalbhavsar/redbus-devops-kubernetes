@@ -3,9 +3,13 @@ const app = express();
 const mongoose = require("mongoose");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
-const stripe = require("stripe")(
-  process.env.STRIPE_SECRET_KEY || "your-stripe-secret-key"
-); // Stripe key loaded from environment variable
+
+// Initialize Stripe - key must be set via STRIPE_SECRET_KEY environment variable
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+if (!stripeKey) {
+  console.warn("Warning: STRIPE_SECRET_KEY environment variable not set");
+}
+const stripe = require("stripe")(stripeKey || "sk_test_placeholder");
 
 mongoose.pluralize(null);
 app.use(express.json());
