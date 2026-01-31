@@ -3,11 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        AWS_ACCOUNT_ID = ''  // Will be set dynamically
         EKS_CLUSTER_NAME = 'redbus-cluster'
-        ECR_REGISTRY = ''    // Will be set dynamically
-        FRONTEND_IMAGE = ''  // Will be set dynamically
-        BACKEND_IMAGE = ''   // Will be set dynamically
         SONAR_SCANNER_HOME = tool 'SonarQubeScanner'
         SONAR_PROJECT_KEY = 'redbus-devops'
     }
@@ -17,19 +13,47 @@ pipeline {
     }
 
     stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
         stage('Setup ECR Registry') {
             steps {
-                script {
-                    // Get AWS Account ID dynamically
-                    AWS_ACCOUNT_ID = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
-                    // Set ECR Registry URL
-                    ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                    // Set image names
-                    FRONTEND_IMAGE = "${ECR_REGISTRY}/redbus-frontend"
-                    BACKEND_IMAGE = "${ECR_REGISTRY}/redbus-backend"
-                    echo "📦 ECR Registry: ${ECR_REGISTRY}"
-                    echo "🖼️ Frontend Image: ${FRONTEND_IMAGE}"
-                    echo "🖼️ Backend Image: ${BACKEND_IMAGE}"
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    script {
+                        // Get AWS Account ID dynamically
+                        env.AWS_ACCOUNT_ID = sh(
+                            script: 'aws sts get-caller-identity --query Account --output text',
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Set ECR Registry URL
+                        env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        
+                        // Set image names
+                        env.FRONTEND_IMAGE = "${env.ECR_REGISTRY}/redbus-frontend"
+                        env.BACKEND_IMAGE = "${env.ECR_REGISTRY}/redbus-backend"
+                        
+                        echo "📦 ECR Registry: ${env.ECR_REGISTRY}"
+                        echo "🖼️ Frontend Image: ${env.FRONTEND_IMAGE}"
+                        echo "🖼️ Backend Image: ${env.BACKEND_IMAGE}"
+                    }
+                }
+            }
+        }
+
+        stage('Ensure ECR Repositories') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh '''
+                        aws ecr describe-repositories --repository-names redbus-frontend --region ${AWS_REGION} || \
+                        aws ecr create-repository --repository-name redbus-frontend --region ${AWS_REGION}
+                        
+                        aws ecr describe-repositories --repository-names redbus-backend --region ${AWS_REGION} || \
+                        aws ecr create-repository --repository-name redbus-backend --region ${AWS_REGION}
+                    '''
                 }
             }
         }
@@ -72,7 +96,7 @@ pipeline {
                 stage('Backend Tests') {
                     steps {
                         dir('back-end-redbus') {
-                            sh 'npm test || true'
+                            sh 'npm test'
                         }
                     }
                 }
@@ -88,9 +112,9 @@ pipeline {
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                             -Dsonar.projectName="RedBus DevOps" \
                             -Dsonar.projectVersion=${BUILD_NUMBER} \
-                            -Dsonar.sources=. \
+                            -Dsonar.sources=front-end-redbus,back-end-redbus \
                             -Dsonar.exclusions=**/node_modules/**,**/build/**,**/dist/**,**/*.test.js \
-                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                            -Dsonar.javascript.lcov.reportPaths=front-end-redbus/coverage/lcov.info,back-end-redbus/coverage/lcov.info
                     '''
                 }
             }
