@@ -134,6 +134,9 @@ pipeline {
                 echo '🛡️ Running OWASP Dependency Check...'
                 script {
                     try {
+                        // Create output directory first
+                        sh 'mkdir -p dependency-check-report'
+                        
                         dependencyCheck additionalArguments: '''
                             --scan .
                             --format HTML
@@ -146,7 +149,7 @@ pipeline {
                         
                         dependencyCheckPublisher pattern: 'dependency-check-report/dependency-check-report.xml'
                     } catch (Exception e) {
-                        echo "⚠️ OWASP Dependency Check skipped: Tool not configured in Jenkins"
+                        echo "⚠️ OWASP Dependency Check skipped: ${e.getMessage()}"
                         echo "To enable: Manage Jenkins → Tools → Add Dependency-Check → Name: 'OWASP-Dependency-Check' → Install automatically"
                     }
                 }
@@ -169,7 +172,7 @@ pipeline {
                     steps {
                         echo '🐳 Building Frontend Docker image...'
                         sh '''
-                            docker build -f docker/frontend.Dockerfile -t ${FRONTEND_IMAGE}:${BUILD_NUMBER} ./front-end-redbus
+                            docker build -f docker/frontend.Dockerfile -t ${FRONTEND_IMAGE}:${BUILD_NUMBER} .
                             docker tag ${FRONTEND_IMAGE}:${BUILD_NUMBER} ${FRONTEND_IMAGE}:latest
                         '''
                     }
@@ -178,7 +181,7 @@ pipeline {
                     steps {
                         echo '🐳 Building Backend Docker image...'
                         sh '''
-                            docker build -f docker/backend.Dockerfile -t ${BACKEND_IMAGE}:${BUILD_NUMBER} ./back-end-redbus
+                            docker build -f docker/backend.Dockerfile -t ${BACKEND_IMAGE}:${BUILD_NUMBER} .
                             docker tag ${BACKEND_IMAGE}:${BUILD_NUMBER} ${BACKEND_IMAGE}:latest
                         '''
                     }
