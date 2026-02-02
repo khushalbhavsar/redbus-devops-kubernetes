@@ -501,46 +501,97 @@ post {
 
 ## 🔧 Jenkins Installation & Setup
 
-### Step 1: Install Jenkins (Amazon Linux)
+### Step 1: Launch EC2 Instance
+
+- **AMI**: Amazon Linux 2023
+- **Instance Type**: t2.medium or larger (Jenkins needs 2GB+ RAM)
+- **Security Group**: Allow ports 22 (SSH), 8080 (Jenkins), 9000 (SonarQube)
+
+### Step 2: Install Required Packages
+
+#### 1. Update System and Install Git
 
 ```bash
-#!/bin/bash
-# Location: scripts/devops/jenkins.sh
-
-# Update system packages
 sudo yum update -y
+sudo yum install git -y
+git --version
+```
 
-# Install Java 17 (Amazon Corretto)
-sudo yum install java-17-amazon-corretto-devel -y
+#### 2. Install Docker
 
+```bash
+sudo yum install docker -y
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+#### 3. Install Java (Amazon Corretto 21)
+
+```bash
+# Option 1: Amazon Corretto
+sudo dnf install java-21-amazon-corretto -y
+
+# Option 2: OpenJDK
+sudo yum install fontconfig java-21-openjdk -y
+
+# Verify installation
+java --version
+```
+
+#### 4. Install Maven
+
+```bash
+sudo yum install maven -y
+mvn -v
+```
+
+#### 5. Install Jenkins
+
+```bash
 # Add Jenkins repository
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 
 # Import Jenkins GPG key
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
-# Install Jenkins
+# Update and install Jenkins
+sudo yum upgrade -y
 sudo yum install jenkins -y
 
-# Start Jenkins service
-sudo systemctl start jenkins
-
-# Enable Jenkins to start on boot
-sudo systemctl enable jenkins
-
-# Get initial admin password
-echo "Initial password: $(sudo cat /var/lib/jenkins/secrets/initialAdminPassword)"
+# Verify installation
+jenkins --version
 ```
 
-### Step 2: Access Jenkins
+#### 6. Add Jenkins User to Docker Group
 
-1. Open browser: `http://<server-ip>:8080`
-2. Enter initial admin password
+```bash
+sudo usermod -aG docker jenkins
+```
+
+### ▶️ Step 3: Start Jenkins
+
+```bash
+sudo systemctl start jenkins
+sudo systemctl enable jenkins
+```
+
+### 🌐 Step 4: Access Jenkins Web UI
+
+1. Open your browser and go to:
+   ```
+   http://<YOUR_EC2_PUBLIC_IP>:8080
+   ```
+
+2. Unlock Jenkins using the initial admin password:
+   ```bash
+   sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+   ```
+
 3. Install suggested plugins
 4. Create admin user
 5. Configure Jenkins URL
 
-### Step 3: Install Required Plugins
+### Step 5: Install Required Plugins
 
 Navigate to: `Dashboard > Manage Jenkins > Manage Plugins > Available`
 
@@ -559,7 +610,7 @@ Navigate to: `Dashboard > Manage Jenkins > Manage Plugins > Available`
 | **Workspace Cleanup** | Clean workspace |
 | **HTML Publisher** | HTML reports |
 
-### Step 4: Configure Global Tools
+### Step 6: Configure Global Tools
 
 Navigate to: `Dashboard > Manage Jenkins > Global Tool Configuration`
 
@@ -587,7 +638,7 @@ Install automatically: ✓
 Version: Latest
 ```
 
-### Step 5: Configure Jenkins System
+### Step 7: Configure Jenkins System
 
 Navigate to: `Dashboard > Manage Jenkins > Configure System`
 
@@ -702,8 +753,172 @@ Pipeline:
 | **Purpose** | Code quality & security analysis |
 | **Metrics** | Bugs, Vulnerabilities, Code Smells, Coverage, Duplications |
 | **Integration** | Jenkins SonarQube Scanner plugin |
+| **Port** | 9000 |
 
-### Step 1: Install SonarQube (Docker)
+---
+
+### Option 1: Install SonarQube on EC2 (Production)
+
+#### 1️⃣ Update System Packages
+
+```bash
+sudo yum update -y
+sudo dnf update -y
+sudo yum install unzip -y
+```
+
+#### 2️⃣ Install Java 17 (Amazon Corretto)
+
+```bash
+sudo yum search java-17
+sudo yum install java-17-amazon-corretto.x86_64 -y
+java --version
+```
+
+#### 3️⃣ Install PostgreSQL 15
+
+```bash
+sudo dnf install postgresql15.x86_64 postgresql15-server -y
+sudo postgresql-setup --initdb
+
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+#### 4️⃣ Configure PostgreSQL User & Database
+
+```bash
+sudo passwd postgres
+# Set password: Admin@123 (retype)
+```
+
+Login as postgres:
+
+```bash
+sudo -i -u postgres psql
+```
+
+Run SQL commands:
+
+```sql
+ALTER USER postgres WITH PASSWORD 'Admin@1234';
+CREATE DATABASE sonarqube;
+CREATE USER sonar WITH ENCRYPTED PASSWORD 'Sonar@123';
+GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonar;
+\q
+```
+
+#### 5️⃣ Download & Setup SonarQube
+
+```bash
+cd /opt
+sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-10.6.0.92116.zip
+sudo unzip sonarqube-10.6.0.92116.zip
+sudo mv sonarqube-10.6.0.92116 sonarqube
+```
+
+#### 6️⃣ Set Kernel & OS Limits
+
+```bash
+echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+Add limits:
+
+```bash
+sudo tee -a /etc/security/limits.conf <<EOF
+sonar   -   nofile   65536
+sonar   -   nproc    4096
+EOF
+```
+
+#### 7️⃣ Configure SonarQube Database Settings
+
+Edit config:
+
+```bash
+sudo nano /opt/sonarqube/conf/sonar.properties
+```
+
+Add these lines:
+
+```properties
+sonar.jdbc.username=sonar
+sonar.jdbc.password=Sonar@123
+sonar.jdbc.url=jdbc:postgresql://localhost:5432/sonarqube
+```
+
+#### 8️⃣ Create SonarQube User
+
+```bash
+sudo useradd sonar
+sudo chown -R sonar:sonar /opt/sonarqube
+```
+
+#### 9️⃣ Create Systemd Service File
+
+```bash
+sudo nano /etc/systemd/system/sonarqube.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=SonarQube LTS Service
+After=network.target
+
+[Service]
+Type=forking
+User=sonar
+Group=sonar
+LimitNOFILE=65536
+LimitNPROC=4096
+
+Environment="JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64"
+Environment="PATH=/usr/lib/jvm/java-17-amazon-corretto.x86_64/bin:/usr/local/bin:/usr/bin:/bin"
+
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 🔟 Set Permissions
+
+```bash
+sudo chmod +x /opt/sonarqube/bin/linux-x86-64/sonar.sh
+sudo chmod -R 755 /opt/sonarqube/bin/
+sudo chown -R sonar:sonar /opt/sonarqube
+```
+
+#### 1️⃣1️⃣ Start SonarQube Service
+
+```bash
+sudo systemctl reset-failed sonarqube
+sudo systemctl daemon-reload
+sudo systemctl start sonarqube
+sudo systemctl enable sonarqube
+sudo systemctl status sonarqube -l
+```
+
+#### 💻 Access SonarQube
+
+Open in browser:
+
+```
+http://<EC2-PUBLIC-IP>:9000
+```
+
+**Default credentials:** `admin` / `admin`
+
+---
+
+### Option 2: Install SonarQube (Docker - Quick Setup)
 
 ```bash
 # Run SonarQube container
@@ -719,7 +934,9 @@ docker run -d \
 # Default credentials: admin/admin
 ```
 
-### Step 2: Configure SonarQube
+---
+
+### Configure SonarQube Project
 
 1. Login to SonarQube (http://your-server:9000)
 2. Change default password
@@ -729,7 +946,7 @@ docker run -d \
    Display Name: RedBus DevOps
    ```
 
-### Step 3: Generate Token
+### Generate Token
 
 1. Go to: My Account → Security
 2. Generate Token:
@@ -740,7 +957,7 @@ docker run -d \
    ```
 3. Copy the token
 
-### Step 4: Add Token to Jenkins
+### Add Token to Jenkins
 
 Navigate to: `Dashboard > Manage Jenkins > Manage Credentials`
 
@@ -751,7 +968,7 @@ ID: sonar-token
 Description: SonarQube Token
 ```
 
-### Step 5: Configure SonarQube in Jenkins
+### Configure SonarQube in Jenkins
 
 Navigate to: `Dashboard > Manage Jenkins > Configure System > SonarQube servers`
 

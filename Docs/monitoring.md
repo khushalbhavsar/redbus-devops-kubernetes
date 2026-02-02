@@ -834,6 +834,243 @@ spec:
 
 ## 🚀 Deployment Guide
 
+### EC2 Instance Requirements
+
+| Component | Instance Type | Security Group Inbound Ports |
+|-----------|--------------|------------------------------|
+| Grafana Server | t3.medium | 3000, 9090, 9100 |
+
+---
+
+## 📦 EC2 Installation (Standalone Setup)
+
+### 🟠 Grafana Server Installation
+
+#### 1️⃣ Update System & Install Dependencies
+
+```bash
+sudo yum update -y
+sudo yum install wget tar -y
+sudo yum install make -y
+```
+
+#### 2️⃣ Install Grafana Enterprise
+
+```bash
+sudo yum install -y https://dl.grafana.com/grafana-enterprise/release/12.2.1/grafana-enterprise_12.2.1_18655849634_linux_amd64.rpm
+```
+
+#### 3️⃣ Start Grafana Service
+
+```bash
+sudo systemctl start grafana-server
+sudo systemctl enable grafana-server
+sudo systemctl status grafana-server
+grafana-server --version
+```
+
+#### 4️⃣ Access Grafana
+
+Open in browser:
+
+```
+http://<EC2_PUBLIC_IP>:3000
+```
+
+**Default Credentials:**
+- Username: `admin`
+- Password: `admin`
+- Change password to: `Admin@123`
+
+---
+
+### 🔥 Prometheus Installation
+
+#### 1️⃣ Download Prometheus
+
+```bash
+# Download from https://prometheus.io/download/
+wget https://github.com/prometheus/prometheus/releases/download/v3.5.0/prometheus-3.5.0.linux-amd64.tar.gz
+```
+
+#### 2️⃣ Extract & Setup
+
+```bash
+sudo tar -xvf prometheus-3.5.0.linux-amd64.tar.gz
+sudo mv prometheus-3.5.0.linux-amd64 prometheus
+```
+
+#### 3️⃣ Create Prometheus User
+
+```bash
+sudo useradd --no-create-home --shell /bin/false prometheus
+```
+
+#### 4️⃣ Setup Directories & Binaries
+
+```bash
+cd prometheus
+
+# Copy binaries
+sudo cp -r prometheus /usr/local/bin/
+sudo cp -r promtool /usr/local/bin/
+
+# Create directories
+sudo mkdir /etc/prometheus
+sudo mkdir /var/lib/prometheus
+
+# Copy config
+sudo cp prometheus.yml /etc/prometheus/
+
+# Set ownership
+sudo chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/promtool
+```
+
+#### 5️⃣ Create Systemd Service
+
+```bash
+sudo nano /etc/systemd/system/prometheus.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Prometheus Monitoring
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --web.console.templates=/etc/prometheus/consoles \
+  --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save & exit.
+
+#### 6️⃣ Start Prometheus
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start prometheus
+sudo systemctl enable prometheus
+sudo systemctl status prometheus
+```
+
+#### 7️⃣ Access Prometheus UI
+
+Open in browser:
+
+```
+http://<EC2_PUBLIC_IP>:9090
+```
+
+---
+
+### 📊 Node Exporter Installation
+
+#### 1️⃣ Download Node Exporter
+
+```bash
+wget https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz
+tar xvf node_exporter-1.10.2.linux-amd64.tar.gz
+cd node_exporter-1.10.2.linux-amd64
+```
+
+#### 2️⃣ Setup Node Exporter
+
+```bash
+sudo cp node_exporter /usr/local/bin
+sudo useradd node_exporter --no-create-home --shell /bin/false
+sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
+```
+
+#### 3️⃣ Create Systemd Service
+
+```bash
+sudo nano /etc/systemd/system/node_exporter.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save & exit.
+
+#### 4️⃣ Start Node Exporter
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start node_exporter
+sudo systemctl enable node_exporter
+sudo systemctl status node_exporter
+```
+
+#### 5️⃣ Verify Node Exporter
+
+Open in browser:
+
+```
+http://<EC2_PUBLIC_IP>:9100/metrics
+```
+
+---
+
+### 🔗 Configure Prometheus to Scrape Node Exporter
+
+Edit Prometheus config:
+
+```bash
+sudo nano /etc/prometheus/prometheus.yml
+```
+
+Add Node Exporter job:
+
+```yaml
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+```
+
+Restart Prometheus:
+
+```bash
+sudo systemctl restart prometheus
+```
+
+---
+
+## ☸️ Kubernetes Deployment Guide
+
 ### Prerequisites
 
 1. EKS cluster running
