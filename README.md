@@ -62,7 +62,7 @@
 
 ## 🏗 Architecture
 
-![Project Flow](ProjectFlow.png)
+![Project Flow](Docs/ProjectFlow.png)
 
 ---
 
