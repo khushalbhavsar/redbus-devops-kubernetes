@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: redbus-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: redbus-backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000

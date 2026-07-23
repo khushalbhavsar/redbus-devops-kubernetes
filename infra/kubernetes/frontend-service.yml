@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app: redbus-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: redbus-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
